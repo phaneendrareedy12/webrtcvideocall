@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import io from 'socket.io-client'
 
@@ -15,7 +15,10 @@ function App() {
   const remoteVideoRef = useRef()
   const pc = useRef(new RTCPeerConnection(null))
   const textRef = useRef()
-  const candidates = useRef([])
+  //const candidates = useRef([])
+  const [offerVisible, setOfferVisible] = useState(true)
+  const [answerVisible, setAnswerVisible] = useState(true)
+  const [status, setStatus] = useState('Make a call now')
 
   useEffect(() => {
 
@@ -25,12 +28,22 @@ function App() {
 
     socket.on('sdp', data => {
       console.log(data)
+      pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp))
       textRef.current.value = JSON.stringify(data.sdp)
+
+      if (data.sdp.type === 'offer') {
+        setOfferVisible(false)
+        setAnswerVisible(true)
+        setStatus('Incoming call .....')
+      } else {
+        setStatus('Call established')
+      }
     })
 
     socket.on('candidate', candidate => {
       console.log(candidate)
-      candidates.current = [...candidates.current, candidate]
+      //candidates.current = [...candidates.current, candidate]
+      pc.current.addIceCandidate(new RTCIceCandidate(candidate))
     })
 
     const contraints = {
@@ -54,7 +67,7 @@ function App() {
     _pc.onicecandidate = e => {
       if (e.candidate) {
         console.log(JSON.stringify(e.candidate))
-        socket.emit('candidate', e.candidate)
+        sendToPeer('candidate', e.candidate)
       }
     }
 
@@ -70,18 +83,27 @@ function App() {
 
   }, [])
 
+  const sendToPeer = (eventType, payload) => {
+    socket.emit(eventType, payload)
+  }
+
+  const processSDP = sdp => {
+    console.log(JSON.stringify(sdp))
+    pc.current.setLocalDescription(sdp)
+
+    //send the SDP to server
+    sendToPeer('sdp', { sdp })
+  }
+
   const createOffer = () => {
     pc.current.createOffer({
       offerToReceiveAudio: 1,
       offerToReceiveVideo: 1
     }).then(sdp => {
-      console.log(JSON.stringify(sdp))
-      pc.current.setLocalDescription(sdp)
-
       //send the SDP to server
-      socket.emit('sdp', {
-        sdp
-      })
+      processSDP(sdp)
+      setOfferVisible(false)
+      setStatus('Calling ......')
     }).catch(e => console.log())
   }
 
@@ -90,17 +112,14 @@ function App() {
       offerToReceiveAudio: 1,
       offerToReceiveVideo: 1
     }).then(sdp => {
-      console.log(JSON.stringify(sdp))
-      pc.current.setLocalDescription(sdp)
-
       //send the answer sdp to the offering peer
-      socket.emit('sdp', {
-        sdp
-      })
+      processSDP(sdp)
+      setAnswerVisible(false)
+      setStatus('Call established')
     }).catch(e => console.log())
   }
 
-  const setRemoteDescription = () => {
+  {/*const setRemoteDescription = () => {
     const sdp = JSON.parse(textRef.current.value)
     console.log(sdp)
 
@@ -115,6 +134,22 @@ function App() {
       console.log(candidate)
       pc.current.addIceCandidate(new RTCIceCandidate(candidate))
     })
+  }*/}
+
+  const showHideButtons = () => {
+    if (offerVisible) {
+      return (
+        <div>
+          <button onClick={createOffer}>Call</button>
+        </div>
+      )
+    } else if (answerVisible) {
+      return (
+        <div>
+          <button onClick={createAnswer}>Answer</button>
+        </div>
+      )
+    }
   }
 
   return (
@@ -130,11 +165,13 @@ function App() {
         }}
         ref={remoteVideoRef} autoPlay></video>
       <br />
-      <button onClick={createOffer}>Create Offer</button>
+      {/*<button onClick={createOffer}>Create Offer</button>
       <button onClick={createAnswer}>Create Answer</button>
       <button onClick={setRemoteDescription}>Set Remote Description</button>
-      <button onClick={addCandidate}>Add Candidates</button>
+      <button onClick={addCandidate}>Add Candidates</button>*/}
       <br />
+      {showHideButtons()}
+      <div>{status}</div>
       <textarea ref={textRef} />
     </div>
   );
