@@ -2,6 +2,7 @@ const express = require('express')
 const { Socket } = require('socket.io')
 const mongoose = require('mongoose')
 const axios = require('axios')
+const uuid = require('react-uuid')
 
 const io = require('socket.io')({
     path: '/webrtc'
@@ -10,6 +11,7 @@ const io = require('socket.io')({
 const app = express()
 app.use(express.json())
 const port = 8080
+
 
 app.get('/', (req, res) => res.send('Hello WebRTC!!'))
 
@@ -27,7 +29,9 @@ mongoose.connect('mongodb://localhost:27017/webrtc', {
 
 const offerAnswerSchema = {
     type:String,
-    sdp:String
+    sdp:String,
+    timestamp:Date,
+    deviceid:String
 }
 
 const monModelOfferAnswer = mongoose.model('signalingdata',offerAnswerSchema)
@@ -36,7 +40,35 @@ app.post('/saveOfferAnswer', async(req,res) => {
 
     const dataToSave = new monModelOfferAnswer({
         type:req.body.sdp.type,
-        sdp:req.body.sdp.sdp
+        sdp:req.body.sdp.sdp,
+        timestamp:new Date(),
+        deviceid:uuid()
+    })
+
+    const val = await dataToSave.save()
+    console.log('res josn ***')
+    console.log(val)
+    res.json(val)
+})
+
+const iceCandidatesSchema = {
+    candidate:String,
+    sdpMid:String,
+    sdpMLineIndex:String,
+    usernameFragment:String,
+    timestamp:Date
+}
+
+const monIceCandidates = mongoose.model('iceCandidates',iceCandidatesSchema)
+
+app.post('/saveIceCandidates', async(req,res) => {
+
+    const dataToSave = new monIceCandidates({
+        candidate:req.body.candidate,
+        sdpMid:req.body.sdpMid,
+        sdpMLineIndex:req.body.sdpMLineIndex,
+        usernameFragment:req.body.usernameFragment,
+        timestamp:new Date()
     })
 
     const val = await dataToSave.save()
@@ -73,12 +105,19 @@ webRTCNamespace.on('connection', socket => {
             console.log("post called successfully")
         })
         .catch(error => {
-            console.log("error occurred while calling post method which saves data into DB")
+            console.log("error occurred while calling post method which saves answer offer data into DB")
         }) 
     }) 
 
     socket.on('candidate', data => {
         console.log(data)
         socket.broadcast.emit('candidate', data)
+        axios.post('http://localhost:8080/saveIceCandidates', data)
+        .then(response => {
+            console.log("post called successfully")
+        })
+        .catch(error => {
+            console.log("error occurred while calling post method which saves ice candidates data into DB")
+        }) 
     })
 })
