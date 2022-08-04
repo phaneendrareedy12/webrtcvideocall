@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import io from 'socket.io-client'
 
+//configure socket io client , we could see same namespace (/webRTCPeers), path(/webrtc) in server as well , both(client & server) should match to establish connection
 const socket = io(
   '/webRTCPeers',
   {
@@ -15,17 +16,18 @@ function App() {
   const remoteVideoRef = useRef()
   const pc = useRef(new RTCPeerConnection(null))
   const textRef = useRef()
-  //const candidates = useRef([])
   const [offerVisible, setOfferVisible] = useState(true)
   const [answerVisible, setAnswerVisible] = useState(true)
   const [status, setStatus] = useState('Make a call now')
 
+  // useEffect is a hook, this completely react concept , as per our code this will execute once client starts
   useEffect(() => {
 
     socket.on('connection-success', success => {
       console.log(success)
     })
 
+    // This will be executed when server emits sdp package , we could see same in server as well . 
     socket.on('sdp', data => {
       console.log(data)
       pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp))
@@ -40,6 +42,7 @@ function App() {
       }
     })
 
+    /// This will be executed when server emits cadidate package , we could see same in server as well .
     socket.on('candidate', candidate => {
       console.log(candidate)
       //candidates.current = [...candidates.current, candidate]
@@ -83,18 +86,22 @@ function App() {
 
   }, [])
 
+  //common method to emit all the evenets.
   const sendToPeer = (eventType, payload) => {
     socket.emit(eventType, payload)
   }
 
+  // Will be called by both createOffer & createAnswer
   const processSDP = sdp => {
     console.log(JSON.stringify(sdp))
+    //set Remote disctpion
     pc.current.setLocalDescription(sdp)
 
     //send the SDP to server
     sendToPeer('sdp', { sdp })
   }
 
+  // We will send(emit) the offer sdp and ice cadiates details to Signaling server
   const createOffer = () => {
     pc.current.createOffer({
       offerToReceiveAudio: 1,
@@ -102,11 +109,13 @@ function App() {
     }).then(sdp => {
       //send the SDP to server
       processSDP(sdp)
+
       setOfferVisible(false)
       setStatus('Calling ......')
     }).catch(e => console.log())
   }
 
+  // We will send(emit) the answer and ice candidates details to Signaling server
   const createAnswer = () => {
     pc.current.createAnswer({
       offerToReceiveAudio: 1,
@@ -119,23 +128,10 @@ function App() {
     }).catch(e => console.log())
   }
 
-  {/*const setRemoteDescription = () => {
-    const sdp = JSON.parse(textRef.current.value)
-    console.log(sdp)
 
-    pc.current.setRemoteDescription(new RTCSessionDescription(sdp))
-  }
-
-  const addCandidate = () => {
-    //const candidate = JSON.parse(textRef.current.value)
-    //console.log('Adding Candidate...', candidate)
-
-    candidates.current.forEach(candidate => {
-      console.log(candidate)
-      pc.current.addIceCandidate(new RTCIceCandidate(candidate))
-    })
-  }*/}
-
+   /*flow will start here , once call button clicked createOffer function will be called , so that offer sdp and ice cadidates will be shared to opposite peer through Signaling server,
+   opposite will click on answer button and createAnswer method will be called , so that answer sdp and icecadiates will be shared to opposite peer and connection will be established.
+   */
   const showHideButtons = () => {
     if (offerVisible) {
       return (
@@ -152,6 +148,7 @@ function App() {
     }
   }
 
+  //HTML to show video in the screen
   return (
     <div style={{ margin: 10 }}>
       <video
@@ -165,10 +162,6 @@ function App() {
         }}
         ref={remoteVideoRef} autoPlay></video>
       <br />
-      {/*<button onClick={createOffer}>Create Offer</button>
-      <button onClick={createAnswer}>Create Answer</button>
-      <button onClick={setRemoteDescription}>Set Remote Description</button>
-      <button onClick={addCandidate}>Add Candidates</button>*/}
       <br />
       {showHideButtons()}
       <div>{status}</div>
